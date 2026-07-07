@@ -7,6 +7,7 @@ max-in-memory-rows: 1500
 
 __definitions__:
   - import os
+  - import json
   - |
     def read_file(path):
         return open(path, 'r').read()
@@ -57,19 +58,28 @@ __definitions__:
       }}
     """
   - |
-    def make_inspect_link(alias):
+    def make_inspect_link(aliases):
+        aliases_json = json.dumps(list(aliases))
         return f"""
           function link_obs(value, row) {{
             const base = "https://varlociraptor.github.io/varlociraptor-inspect/";
             const params = new URLSearchParams();
-            params.append(`OBS_{alias}`, value);
-            const afdKey = `{alias}: allele frequency distribution`;
-            if (row[afdKey] !== undefined && row[afdKey] !== null && row[afdKey] !== "") {{
-              const afdValue = row[afdKey].replace(/^\(|\)$/g, '').replace(/'/g, '').replace(/,\s+/g, ',');
-              if (afdValue && afdValue !== ".") {{
-                params.append(`AFD_{alias}`, afdValue);
+            const aliases = {aliases_json};
+            aliases.forEach(alias => {{
+              const obsKey = `${{alias}}: observations`;
+              const obsValue = row[obsKey];
+              if (obsValue !== undefined && obsValue !== null && obsValue !== "" && obsValue !== ".") {{
+                params.append(`OBS_${{alias}}`, obsValue);
               }}
-            }}
+              const afdKey = `${{alias}}: allele frequency distribution`;
+              const afdRaw = row[afdKey];
+              if (afdRaw !== undefined && afdRaw !== null && afdRaw !== "") {{
+                const afdValue = afdRaw.replace(/^\(|\)$/g, '').replace(/'/g, '').replace(/,\s+/g, ',');
+                if (afdValue && afdValue !== ".") {{
+                  params.append(`AFD_${{alias}}`, afdValue);
+                }}
+              }}
+            }});
             Object.keys(row).forEach(key => {{
               if (key.startsWith("prob: ")) {{
                 const event = "PROB_" + key.replace("prob: ", "").toUpperCase();
@@ -79,11 +89,11 @@ __definitions__:
               }}
             }});
             return `
-              <a
+              
                 href="${{base}}?${{params}}"
                 target="_blank"
                 class="btn btn-sm btn-outline-secondary py-0 px-1"
-                title="Open in varlociraptor-inspect"
+                title="Open all samples in varlociraptor-inspect"
               >
                 <svg xmlns="http://www.w3.org/2000/svg"
                      width="14"
@@ -380,7 +390,7 @@ views:
           ?for alias in params.samples.loc[params.samples["group"] == group, "alias"]:
             '?f"{alias}: observations"':
               optional: true
-              custom: ?make_inspect_link(alias)
+              custom: ?make_inspect_link(params.samples.loc[params.samples["group"] == group, "alias"])
               display-mode: normal
           spliceai:
             optional: true
@@ -556,7 +566,7 @@ views:
           ?for alias in params.samples.loc[params.samples["group"] == group, "alias"]:
             '?f"{alias}: observations"':
               optional: true
-              custom: ?make_inspect_link(alias)
+              custom: ?make_inspect_link(params.samples.loc[params.samples["group"] == group, "alias"])
               display-mode: normal
           spliceai:
             optional: true
